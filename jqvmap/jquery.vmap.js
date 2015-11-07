@@ -1,15 +1,15 @@
 /*!
- * jQVMap Version 1.0
+ * jQVMap Version 1.1.0
  *
  * http://jqvmap.com
  *
- * Copyright 2012, Peter Schmalfeldt <manifestinteractive@gmail.com>
+ * Copyright 2012-2015, Peter Schmalfeldt <manifestinteractive@gmail.com>
  * Copyright 2011-2012, Kirill Lebedev
  * Licensed under the MIT license.
  *
  * Fork Me @ https://github.com/manifestinteractive/jqvmap
  */
-(function ($) {
+(function(){
 
   var apiParams = {
     colors: 1,
@@ -35,61 +35,18 @@
     onRegionDeselect: 'regionDeselect'
   };
 
-  $.fn.vectorMap = function (options) {
-
-    var defaultParams = {
-      map: 'world_en',
-      backgroundColor: '#a5bfdd',
-      color: '#f4f3f0',
-      hoverColor: '#c9dfaf',
-      selectedColor: '#c9dfaf',
-      scaleColors: ['#b6d6ff', '#005ace'],
-      normalizeFunction: 'linear',
-      enableZoom: true,
-      showTooltip: true,
-      borderColor: '#818181',
-      borderWidth: 1,
-      borderOpacity: 0.25,
-      selectedRegions: null,
-      multiSelectRegion: false
-    }, map = this.data('mapObject');
-
-    if (options === 'addMap') {
-      WorldMap.maps[arguments[1]] = arguments[2];
-    } else if (options === 'set' && apiParams[arguments[1]]) {
-      map['set' + arguments[1].charAt(0).toUpperCase() + arguments[1].substr(1)].apply(map, Array.prototype.slice.call(arguments, 2));
-    } else if (typeof options === 'string' &&
-               typeof map[options] === 'function') {
-      return map[options].apply(map, Array.prototype.slice.call(arguments, 1));
-    } else {
-      $.extend(defaultParams, options);
-      defaultParams.container = this;
-      this.css({ position: 'relative', overflow: 'hidden' });
-
-      map = new WorldMap(defaultParams);
-
-      this.data('mapObject', map);
-
-      for (var e in apiEvents) {
-        if (defaultParams[e]) {
-          this.bind(apiEvents[e] + '.jqvmap', defaultParams[e]);
-        }
-      }
-    }
-  };
-
   var VectorCanvas = function (width, height, params) {
     this.mode = window.SVGAngle ? 'svg' : 'vml';
     this.params = params;
 
-    if (this.mode == 'svg') {
+    if (this.mode === 'svg') {
       this.createSvgNode = function (nodeName) {
         return document.createElementNS(this.svgns, nodeName);
       };
     } else {
       try {
         if (!document.namespaces.rvml) {
-          document.namespaces.add("rvml", "urn:schemas-microsoft-com:vml");
+          document.namespaces.add('rvml', 'urn:schemas-microsoft-com:vml');
         }
         this.createVmlNode = function (tagName) {
           return document.createElement('<rvml:' + tagName + ' class="rvml">');
@@ -100,10 +57,10 @@
         };
       }
 
-      document.createStyleSheet().addRule(".rvml", "behavior:url(#default#VML)");
+      document.createStyleSheet().addRule('.rvml', 'behavior:url(#default#VML)');
     }
 
-    if (this.mode == 'svg') {
+    if (this.mode === 'svg') {
       this.canvas = this.createSvgNode('svg');
     } else {
       this.canvas = this.createVmlNode('group');
@@ -113,247 +70,19 @@
     this.setSize(width, height);
   };
 
-  VectorCanvas.prototype = {
-    svgns: "http://www.w3.org/2000/svg",
-    mode: 'svg',
-    width: 0,
-    height: 0,
-    canvas: null,
-
-    setSize: function (width, height) {
-      if (this.mode == 'svg') {
-        this.canvas.setAttribute('width', width);
-        this.canvas.setAttribute('height', height);
-      } else {
-        this.canvas.style.width = width + "px";
-        this.canvas.style.height = height + "px";
-        this.canvas.coordsize = width + ' ' + height;
-        this.canvas.coordorigin = "0 0";
-        if (this.rootGroup) {
-          var pathes = this.rootGroup.getElementsByTagName('shape');
-          for (var i = 0, l = pathes.length; i < l; i++) {
-            pathes[i].coordsize = width + ' ' + height;
-            pathes[i].style.width = width + 'px';
-            pathes[i].style.height = height + 'px';
-          }
-          this.rootGroup.coordsize = width + ' ' + height;
-          this.rootGroup.style.width = width + 'px';
-          this.rootGroup.style.height = height + 'px';
-        }
-      }
-      this.width = width;
-      this.height = height;
-    },
-
-    createPath: function (config) {
-      var node;
-      if (this.mode == 'svg') {
-        node = this.createSvgNode('path');
-        node.setAttribute('d', config.path);
-
-        if (this.params.borderColor !== null) {
-          node.setAttribute('stroke', this.params.borderColor);
-        }
-        if (this.params.borderWidth > 0) {
-          node.setAttribute('stroke-width', this.params.borderWidth);
-          node.setAttribute('stroke-linecap', 'round');
-          node.setAttribute('stroke-linejoin', 'round');
-        }
-        if (this.params.borderOpacity > 0) {
-          node.setAttribute('stroke-opacity', this.params.borderOpacity);
-        }
-
-        node.setFill = function (color) {
-          this.setAttribute("fill", color);
-          if (this.getAttribute("original") === null) {
-            this.setAttribute("original", color);
-          }
-        };
-
-        node.getFill = function (color) {
-          return this.getAttribute("fill");
-        };
-
-        node.getOriginalFill = function () {
-          return this.getAttribute("original");
-        };
-
-        node.setOpacity = function (opacity) {
-          this.setAttribute('fill-opacity', opacity);
-        };
-      } else {
-        node = this.createVmlNode('shape');
-        node.coordorigin = "0 0";
-        node.coordsize = this.width + ' ' + this.height;
-        node.style.width = this.width + 'px';
-        node.style.height = this.height + 'px';
-        node.fillcolor = WorldMap.defaultFillColor;
-        node.stroked = false;
-        node.path = VectorCanvas.pathSvgToVml(config.path);
-
-        var scale = this.createVmlNode('skew');
-        scale.on = true;
-        scale.matrix = '0.01,0,0,0.01,0,0';
-        scale.offset = '0,0';
-
-        node.appendChild(scale);
-
-        var fill = this.createVmlNode('fill');
-        node.appendChild(fill);
-
-        node.setFill = function (color) {
-          this.getElementsByTagName('fill')[0].color = color;
-          if (this.getAttribute("original") === null) {
-            this.setAttribute("original", color);
-          }
-        };
-
-        node.getFill = function (color) {
-          return this.getElementsByTagName('fill')[0].color;
-        };
-        node.getOriginalFill = function () {
-          return this.getAttribute("original");
-        };
-        node.setOpacity = function (opacity) {
-          this.getElementsByTagName('fill')[0].opacity = parseInt(opacity * 100, 10) + '%';
-        };
-      }
-      return node;
-    },
-
-    createGroup: function (isRoot) {
-      var node;
-      if (this.mode == 'svg') {
-        node = this.createSvgNode('g');
-      } else {
-        node = this.createVmlNode('group');
-        node.style.width = this.width + 'px';
-        node.style.height = this.height + 'px';
-        node.style.left = '0px';
-        node.style.top = '0px';
-        node.coordorigin = "0 0";
-        node.coordsize = this.width + ' ' + this.height;
-      }
-
-      if (isRoot) {
-        this.rootGroup = node;
-      }
-      return node;
-    },
-
-    applyTransformParams: function (scale, transX, transY) {
-      if (this.mode == 'svg') {
-        this.rootGroup.setAttribute('transform', 'scale(' + scale + ') translate(' + transX + ', ' + transY + ')');
-      } else {
-        this.rootGroup.coordorigin = (this.width - transX) + ',' + (this.height - transY);
-        this.rootGroup.coordsize = this.width / scale + ',' + this.height / scale;
-      }
+  var ColorScale = function (colors, normalizeFunction, minValue, maxValue) {
+    if (colors) {
+      this.setColors(colors);
     }
-  };
-
-  VectorCanvas.pathSvgToVml = function (path) {
-    var result = '';
-    var cx = 0, cy = 0, ctrlx, ctrly;
-
-    return path.replace(/([MmLlHhVvCcSs])((?:-?(?:\d+)?(?:\.\d+)?,?\s?)+)/g, function (segment, letter, coords, index) {
-      coords = coords.replace(/(\d)-/g, '$1,-').replace(/\s+/g, ',').split(',');
-      if (!coords[0]) {
-        coords.shift();
-      }
-
-      for (var i = 0, l = coords.length; i < l; i++) {
-        coords[i] = Math.round(100 * coords[i]);
-      }
-
-      switch (letter) {
-      case 'm':
-        cx += coords[0];
-        cy += coords[1];
-        return 't' + coords.join(',');
-        break;
-
-      case 'M':
-        cx = coords[0];
-        cy = coords[1];
-        return 'm' + coords.join(',');
-        break;
-
-      case 'l':
-        cx += coords[0];
-        cy += coords[1];
-        return 'r' + coords.join(',');
-        break;
-
-      case 'L':
-        cx = coords[0];
-        cy = coords[1];
-        return 'l' + coords.join(',');
-        break;
-
-      case 'h':
-        cx += coords[0];
-        return 'r' + coords[0] + ',0';
-        break;
-
-      case 'H':
-        cx = coords[0];
-        return 'l' + cx + ',' + cy;
-        break;
-
-      case 'v':
-        cy += coords[0];
-        return 'r0,' + coords[0];
-        break;
-
-      case 'V':
-        cy = coords[0];
-        return 'l' + cx + ',' + cy;
-        break;
-
-      case 'c':
-        ctrlx = cx + coords[coords.length - 4];
-        ctrly = cy + coords[coords.length - 3];
-        cx += coords[coords.length - 2];
-        cy += coords[coords.length - 1];
-        return 'v' + coords.join(',');
-        break;
-
-      case 'C':
-        ctrlx = coords[coords.length - 4];
-        ctrly = coords[coords.length - 3];
-        cx = coords[coords.length - 2];
-        cy = coords[coords.length - 1];
-        return 'c' + coords.join(',');
-        break;
-
-      case 's':
-        coords.unshift(cy - ctrly);
-        coords.unshift(cx - ctrlx);
-        ctrlx = cx + coords[coords.length - 4];
-        ctrly = cy + coords[coords.length - 3];
-        cx += coords[coords.length - 2];
-        cy += coords[coords.length - 1];
-        return 'v' + coords.join(',');
-        break;
-
-      case 'S':
-        coords.unshift(cy + cy - ctrly);
-        coords.unshift(cx + cx - ctrlx);
-        ctrlx = coords[coords.length - 4];
-        ctrly = coords[coords.length - 3];
-        cx = coords[coords.length - 2];
-        cy = coords[coords.length - 1];
-        return 'c' + coords.join(',');
-        break;
-
-      default:
-        return false;
-        break;
-      }
-
-      return '';
-
-    }).replace(/z/g, '');
+    if (normalizeFunction) {
+      this.setNormalizeFunction(normalizeFunction);
+    }
+    if (minValue) {
+      this.setMin(minValue);
+    }
+    if (minValue) {
+      this.setMax(maxValue);
+    }
   };
 
   var WorldMap = function (params) {
@@ -414,25 +143,25 @@
       path.id = map.getCountryId(key);
       map.countries[key] = path;
 
-      if (this.canvas.mode == 'svg') {
-        path.setAttribute('class', 'jqvmap-region');
+      if (this.canvas.mode === 'svg') {
+        path.setAttribute('class', 'jvectormap-region');
       } else {
-        jQuery(path).addClass('jqvmap-region');
+        jQuery(path).addClass('jvectormap-region');
       }
 
       jQuery(this.rootGroup).append(path);
     }
 
-    jQuery(params.container).delegate(this.canvas.mode == 'svg' ? 'path' : 'shape', 'mouseover mouseout', function (e) {
-      var path = e.target,
-      code = e.target.id.split('_').pop(),
-      labelShowEvent = $.Event('labelShow.jqvmap'),
-      regionMouseOverEvent = $.Event('regionMouseOver.jqvmap');
+    jQuery(params.container).delegate(this.canvas.mode === 'svg' ? 'path' : 'shape', 'mouseover mouseout', function (e) {
+      var containerPath = e.target,
+        code = e.target.id.split('_').pop(),
+        labelShowEvent = jQuery.Event('labelShow.jqvmap'),
+        regionMouseOverEvent = jQuery.Event('regionMouseOver.jqvmap');
 
-      if (e.type == 'mouseover') {
+      if (e.type === 'mouseover') {
         jQuery(params.container).trigger(regionMouseOverEvent, [code, mapData.pathes[code].name]);
         if (!regionMouseOverEvent.isDefaultPrevented()) {
-          map.highlight(code, path);
+          map.highlight(code, containerPath);
         }
         if (params.showTooltip) {
           map.label.text(mapData.pathes[code].name);
@@ -445,51 +174,50 @@
           }
         }
       } else {
-        map.unhighlight(code, path);
+        map.unhighlight(code, containerPath);
 
         map.label.hide();
         jQuery(params.container).trigger('regionMouseOut.jqvmap', [code, mapData.pathes[code].name]);
       }
     });
 
-    jQuery(params.container).delegate(this.canvas.mode == 'svg' ? 'path' : 'shape', 'click', function (e) {
+    jQuery(params.container).delegate(this.canvas.mode === 'svg' ? 'path' : 'shape', 'click', function (regionClickEvent) {
       if (!params.multiSelectRegion) {
-        for (var key in mapData.pathes) {
-          map.countries[key].currentFillColor = map.countries[key].getOriginalFill();
-          map.countries[key].setFill(map.countries[key].getOriginalFill());
+        for (var keyPath in mapData.pathes) {
+          map.countries[keyPath].currentFillColor = map.countries[keyPath].getOriginalFill();
+          map.countries[keyPath].setFill(map.countries[keyPath].getOriginalFill());
         }
       }
 
-      var path = e.target;
-      var code = e.target.id.split('_').pop();
+      var targetPath = regionClickEvent.target;
+      var code = regionClickEvent.target.id.split('_').pop();
 
       jQuery(params.container).trigger('regionClick.jqvmap', [code, mapData.pathes[code].name]);
       if (!regionClickEvent.isDefaultPrevented()) {
-        if (map.selectedRegions.indexOf(code) !== -1) {
-          map.deselect(code, path);
+        if (map.isSelected(code)) {
+          map.deselect(code, targetPath);
         } else {
-          map.select(code, path);
+          map.select(code, targetPath);
         }
       }
-
-      //console.log(selectedRegions);
-
     });
 
     if (params.showTooltip) {
       params.container.mousemove(function (e) {
         if (map.label.is(':visible')) {
-            var left = e.pageX - 15 - map.labelWidth;
-            var top = e.pageY - 15 - map.labelHeight;
-            
-            if(left < 0)
-               left = e.pageX + 15;
-            if(top < 0)
-                top = e.pageY + 15;
-            
-            map.label.css({
-                left: left,
-                top: top
+          var left = e.pageX - 15 - map.labelWidth;
+          var top = e.pageY - 15 - map.labelHeight;
+
+          if(left < 0) {
+            left = e.pageX + 15;
+          }
+          if(top < 0) {
+            top = e.pageY + 15;
+          }
+
+          map.label.css({
+            left: left,
+            top: top
           });
         }
       });
@@ -519,15 +247,8 @@
     }
 
     this.bindZoomButtons();
-    
+
     if(params.pins) {
-      /*if(params.pinMode) {
-          if(params.pinMode != "id" && params.pinMode != "content") {
-              params.pinMode = "content";
-          }
-      } else {
-          params.pinMode = "content";
-      }*/
       this.pinHandlers = false;
       this.placePins(params.pins, params.pinMode);
     }
@@ -535,6 +256,250 @@
     WorldMap.mapIndex++;
   };
 
+  VectorCanvas.prototype = {
+    svgns: 'http://www.w3.org/2000/svg',
+    mode: 'svg',
+    width: 0,
+    height: 0,
+    canvas: null,
+
+    setSize: function (width, height) {
+      if (this.mode === 'svg') {
+        this.canvas.setAttribute('width', width);
+        this.canvas.setAttribute('height', height);
+      } else {
+        this.canvas.style.width = width + 'px';
+        this.canvas.style.height = height + 'px';
+        this.canvas.coordsize = width + ' ' + height;
+        this.canvas.coordorigin = '0 0';
+        if (this.rootGroup) {
+          var pathes = this.rootGroup.getElementsByTagName('shape');
+          for (var i = 0, l = pathes.length; i < l; i++) {
+            pathes[i].coordsize = width + ' ' + height;
+            pathes[i].style.width = width + 'px';
+            pathes[i].style.height = height + 'px';
+          }
+          this.rootGroup.coordsize = width + ' ' + height;
+          this.rootGroup.style.width = width + 'px';
+          this.rootGroup.style.height = height + 'px';
+        }
+      }
+      this.width = width;
+      this.height = height;
+    },
+
+    createPath: function (config) {
+      var node;
+      if (this.mode === 'svg') {
+        node = this.createSvgNode('path');
+        node.setAttribute('d', config.path);
+
+        if (this.params.borderColor !== null) {
+          node.setAttribute('stroke', this.params.borderColor);
+        }
+        if (this.params.borderWidth > 0) {
+          node.setAttribute('stroke-width', this.params.borderWidth);
+          node.setAttribute('stroke-linecap', 'round');
+          node.setAttribute('stroke-linejoin', 'round');
+        }
+        if (this.params.borderOpacity > 0) {
+          node.setAttribute('stroke-opacity', this.params.borderOpacity);
+        }
+
+        node.setFill = function (color) {
+          this.setAttribute('fill', color);
+          if (this.getAttribute('original') === null) {
+            this.setAttribute('original', color);
+          }
+        };
+
+        node.getFill = function () {
+          return this.getAttribute('fill');
+        };
+
+        node.getOriginalFill = function () {
+          return this.getAttribute('original');
+        };
+
+        node.setOpacity = function (opacity) {
+          this.setAttribute('fill-opacity', opacity);
+        };
+      } else {
+        node = this.createVmlNode('shape');
+        node.coordorigin = '0 0';
+        node.coordsize = this.width + ' ' + this.height;
+        node.style.width = this.width + 'px';
+        node.style.height = this.height + 'px';
+        node.fillcolor = WorldMap.defaultFillColor;
+        node.stroked = false;
+        node.path = VectorCanvas.pathSvgToVml(config.path);
+
+        var scale = this.createVmlNode('skew');
+        scale.on = true;
+        scale.matrix = '0.01,0,0,0.01,0,0';
+        scale.offset = '0,0';
+
+        node.appendChild(scale);
+
+        var fill = this.createVmlNode('fill');
+        node.appendChild(fill);
+
+        node.setFill = function (color) {
+          this.getElementsByTagName('fill')[0].color = color;
+          if (this.getAttribute('original') === null) {
+            this.setAttribute('original', color);
+          }
+        };
+
+        node.getFill = function () {
+          return this.getElementsByTagName('fill')[0].color;
+        };
+        node.getOriginalFill = function () {
+          return this.getAttribute('original');
+        };
+        node.setOpacity = function (opacity) {
+          this.getElementsByTagName('fill')[0].opacity = parseInt(opacity * 100, 10) + '%';
+        };
+      }
+      return node;
+    },
+
+    createGroup: function (isRoot) {
+      var node;
+      if (this.mode === 'svg') {
+        node = this.createSvgNode('g');
+      } else {
+        node = this.createVmlNode('group');
+        node.style.width = this.width + 'px';
+        node.style.height = this.height + 'px';
+        node.style.left = '0px';
+        node.style.top = '0px';
+        node.coordorigin = '0 0';
+        node.coordsize = this.width + ' ' + this.height;
+      }
+
+      if (isRoot) {
+        this.rootGroup = node;
+      }
+      return node;
+    },
+
+    applyTransformParams: function (scale, transX, transY) {
+      if (this.mode === 'svg') {
+        this.rootGroup.setAttribute('transform', 'scale(' + scale + ') translate(' + transX + ', ' + transY + ')');
+      } else {
+        this.rootGroup.coordorigin = (this.width - transX) + ',' + (this.height - transY);
+        this.rootGroup.coordsize = this.width / scale + ',' + this.height / scale;
+      }
+    }
+  };
+
+  VectorCanvas.pathSvgToVml = function (path) {
+    var result = '';
+    var cx = 0, cy = 0, ctrlx, ctrly;
+
+    return path.replace(/([MmLlHhVvCcSs])((?:-?(?:\d+)?(?:\.\d+)?,?\s?)+)/g, function (segment, letter, coords) {
+      coords = coords.replace(/(\d)-/g, '$1,-').replace(/\s+/g, ',').split(',');
+      if (!coords[0]) {
+        coords.shift();
+      }
+
+      for (var i = 0, l = coords.length; i < l; i++) {
+        coords[i] = Math.round(100 * coords[i]);
+      }
+
+      switch (letter) {
+        case 'm':
+          cx += coords[0];
+          cy += coords[1];
+          result = 't' + coords.join(',');
+          break;
+
+        case 'M':
+          cx = coords[0];
+          cy = coords[1];
+          result = 'm' + coords.join(',');
+          break;
+
+        case 'l':
+          cx += coords[0];
+          cy += coords[1];
+          result = 'r' + coords.join(',');
+          break;
+
+        case 'L':
+          cx = coords[0];
+          cy = coords[1];
+          result = 'l' + coords.join(',');
+          break;
+
+        case 'h':
+          cx += coords[0];
+          result = 'r' + coords[0] + ',0';
+          break;
+
+        case 'H':
+          cx = coords[0];
+          result = 'l' + cx + ',' + cy;
+          break;
+
+        case 'v':
+          cy += coords[0];
+          result = 'r0,' + coords[0];
+          break;
+
+        case 'V':
+          cy = coords[0];
+          result = 'l' + cx + ',' + cy;
+          break;
+
+        case 'c':
+          ctrlx = cx + coords[coords.length - 4];
+          ctrly = cy + coords[coords.length - 3];
+          cx += coords[coords.length - 2];
+          cy += coords[coords.length - 1];
+          result = 'v' + coords.join(',');
+          break;
+
+        case 'C':
+          ctrlx = coords[coords.length - 4];
+          ctrly = coords[coords.length - 3];
+          cx = coords[coords.length - 2];
+          cy = coords[coords.length - 1];
+          result = 'c' + coords.join(',');
+          break;
+
+        case 's':
+          coords.unshift(cy - ctrly);
+          coords.unshift(cx - ctrlx);
+          ctrlx = cx + coords[coords.length - 4];
+          ctrly = cy + coords[coords.length - 3];
+          cx += coords[coords.length - 2];
+          cy += coords[coords.length - 1];
+          result = 'v' + coords.join(',');
+          break;
+
+        case 'S':
+          coords.unshift(cy + cy - ctrly);
+          coords.unshift(cx + cx - ctrlx);
+          ctrlx = coords[coords.length - 4];
+          ctrly = coords[coords.length - 3];
+          cx = coords[coords.length - 2];
+          cy = coords[coords.length - 1];
+          result = 'c' + coords.join(',');
+          break;
+
+        default:
+          break;
+      }
+
+      return result;
+
+    }).replace(/z/g, '');
+  };
+
+        path.setAttribute('class', 'jvectormap-region');
+        jQuery(path).addClass('jvectormap-region');
   WorldMap.prototype = {
     transX: 0,
     transY: 0,
@@ -552,16 +517,16 @@
     zoomCurStep: 1,
 
     setColors: function (key, color) {
-      if (typeof key == 'string') {
+      if (typeof key === 'string') {
         this.countries[key].setFill(color);
-        this.countries[key].setAttribute("original", color);
+        this.countries[key].setAttribute('original', color);
       } else {
         var colors = key;
 
         for (var code in colors) {
           if (this.countries[code]) {
             this.countries[code].setFill(colors[code]);
-            this.countries[code].setAttribute("original", colors[code]);
+            this.countries[code].setAttribute('original', colors[code]);
           }
         }
       }
@@ -569,17 +534,24 @@
 
     setValues: function (values) {
       var max = 0,
-      min = Number.MAX_VALUE,
-      val;
+        min = Number.MAX_VALUE,
+        val;
 
       for (var cc in values) {
         val = parseFloat(values[cc]);
+        if (isNaN(val)) {
+          continue;
+        }
         if (val > max) {
           max = values[cc];
         }
-        if (val && val < min) {
+        if (val < min) {
           min = val;
         }
+      }
+
+      if (min === max) {
+        max++;
       }
 
       this.colorScale.setMin(min);
@@ -588,11 +560,7 @@
       var colors = {};
       for (cc in values) {
         val = parseFloat(values[cc]);
-        if (val) {
-          colors[cc] = this.colorScale.getColor(val);
-        } else {
-          colors[cc] = this.color;
-        }
+        colors[cc] = isNaN(val) ? this.colorScale.getColor(val) : this.color;
       }
       this.setColors(colors);
       this.values = values;
@@ -619,7 +587,7 @@
     },
 
     highlight: function (cc, path) {
-      path = path || $('#' + this.getCountryId(cc))[0];
+      path = path || jQuery('#' + this.getCountryId(cc))[0];
       if (this.hoverOpacity) {
         path.setOpacity(this.hoverOpacity);
       } else if (this.hoverColor) {
@@ -629,25 +597,33 @@
     },
 
     unhighlight: function (cc, path) {
-      path = path || $('#' + this.getCountryId(cc))[0];
+      path = path || jQuery('#' + this.getCountryId(cc))[0];
       path.setOpacity(1);
       if (path.currentFillColor) {
         path.setFill(path.currentFillColor);
       }
     },
 
+    selectIndex: function (cc) {
+      for (var i = 0; i < this.selectedRegions.length; i++) {
+        if (cc === this.selectedRegions[i]) {
+          return i;
+        }
+      }
+      return -1;
+    },
+
     select: function (cc, path) {
-      path = path || $('#' + this.getCountryId(cc))[0];
-      if(this.selectedRegions.indexOf(cc) < 0) {
+      path = path || jQuery('#' + this.getCountryId(cc))[0];
+      if (!this.isSelected(cc)) {
         if (this.multiSelectRegion) {
           this.selectedRegions.push(cc);
         } else {
           this.selectedRegions = [cc];
         }
-        // MUST BE after the change of selectedRegions
-        // Otherwise, we might loop
-        $(this.container).trigger('regionSelect.jqvmap', [cc]);
-        if (this.selectedColor) {
+
+        jQuery(this.container).trigger('regionSelect.jqvmap', [cc]);
+        if (this.selectedColor && path) {
           path.currentFillColor = this.selectedColor;
           path.setFill(this.selectedColor);
         }
@@ -655,19 +631,24 @@
     },
 
     deselect: function (cc, path) {
-      path = path || $('#' + this.getCountryId(cc))[0];
-      if(this.selectedRegions.indexOf(cc) >= 0) {
-        this.selectedRegions.splice(this.selectedRegions.indexOf(cc), 1);
-        // MUST BE after the change of selectedRegions
-        // Otherwise, we might loop
-        $(this.container).trigger('regionDeselect.jqvmap', [cc]);
+      path = path || jQuery('#' + this.getCountryId(cc))[0];
+      if (this.isSelected(cc)) {
+        this.selectedRegions.splice(this.selectIndex(cc), 1);
+
+        jQuery(this.container).trigger('regionDeselect.jqvmap', [cc]);
         path.currentFillColor = path.getOriginalFill();
         path.setFill(path.getOriginalFill());
+      } else {
+        for (var key in this.countries) {
+          this.selectedRegions.splice(this.selectedRegions.indexOf(key), 1);
+          this.countries[key].currentFillColor = this.color;
+          this.countries[key].setFill(this.color);
+        }
       }
     },
 
     isSelected: function(cc) {
-      return this.selectedRegions.indexOf(cc) >= 0;
+      return this.selectIndex(cc) >= 0;
     },
 
     resize: function () {
@@ -685,9 +666,8 @@
     },
 
     reset: function () {
-      this.countryTitle.reset();
       for (var key in this.countries) {
-        this.countries[key].setFill(WorldMap.defaultColor);
+        this.countries[key].setFill(this.color);
       }
       this.scale = this.baseScale;
       this.transX = this.baseTransX;
@@ -715,14 +695,12 @@
 
       if (this.transY > maxTransY) {
         this.transY = maxTransY;
-      }
-      else if (this.transY < minTransY) {
+      } else if (this.transY < minTransY) {
         this.transY = minTransY;
       }
       if (this.transX > maxTransX) {
         this.transX = maxTransX;
-      }
-      else if (this.transX < minTransX) {
+      } else if (this.transX < minTransX) {
         this.transX = minTransX;
       }
 
@@ -740,9 +718,6 @@
       this.container.mousemove(function (e) {
 
         if (mouseDown) {
-          var curTransX = self.transX;
-          var curTransY = self.transY;
-
           self.transX -= (oldPageX - e.pageX) / self.scale;
           self.transY -= (oldPageY - e.pageY) / self.scale;
 
@@ -791,44 +766,40 @@
         map.zoomOut();
       });
     },
-    
+
     zoomIn: function () {
       var map = this;
       var sliderDelta = (jQuery('#zoom').innerHeight() - 6 * 2 - 15 * 2 - 3 * 2 - 7 - 6) / (this.zoomMaxStep - this.zoomCurStep);
 
       if (map.zoomCurStep < map.zoomMaxStep) {
-        var curTransX = map.transX;
-        var curTransY = map.transY;
-        var curScale = map.scale;
-
         map.transX -= (map.width / map.scale - map.width / (map.scale * map.zoomStep)) / 2;
         map.transY -= (map.height / map.scale - map.height / (map.scale * map.zoomStep)) / 2;
         map.setScale(map.scale * map.zoomStep);
         map.zoomCurStep++;
 
-        jQuery('#zoomSlider').css('top', parseInt(jQuery('#zoomSlider').css('top'), 10) - sliderDelta);
-        
-        map.container.trigger("zoomIn");
+        var $slider = jQuery('#zoomSlider');
+
+        $slider.css('top', parseInt($slider.css('top'), 10) - sliderDelta);
+
+        map.container.trigger('zoomIn');
       }
     },
-    
+
     zoomOut: function () {
       var map = this;
       var sliderDelta = (jQuery('#zoom').innerHeight() - 6 * 2 - 15 * 2 - 3 * 2 - 7 - 6) / (this.zoomMaxStep - this.zoomCurStep);
 
       if (map.zoomCurStep > 1) {
-        var curTransX = map.transX;
-        var curTransY = map.transY;
-        var curScale = map.scale;
-
         map.transX += (map.width / (map.scale / map.zoomStep) - map.width / map.scale) / 2;
         map.transY += (map.height / (map.scale / map.zoomStep) - map.height / map.scale) / 2;
         map.setScale(map.scale / map.zoomStep);
         map.zoomCurStep--;
 
-        jQuery('#zoomSlider').css('top', parseInt(jQuery('#zoomSlider').css('top'), 10) + sliderDelta);
-        
-        map.container.trigger("zoomOut");
+        var $slider = jQuery('#zoomSlider');
+
+        $slider.css('top', parseInt($slider.css('top'), 10) + sliderDelta);
+
+        map.container.trigger('zoomOut');
       }
     },
 
@@ -842,39 +813,41 @@
     },
 
     getPinId: function (cc) {
-      return this.getCountryId(cc)+'_pin';
+      return this.getCountryId(cc) + '_pin';
     },
-    
+
     placePins: function(pins, pinMode){
       var map = this;
 
-      if(!pinMode || (pinMode != "content" && pinMode != "id")) {
-        pinMode = "content";
+      if(!pinMode || (pinMode !== 'content' && pinMode !== 'id')) {
+        pinMode = 'content';
       }
 
-      if(pinMode == "content") {//treat pin as content
+      if(pinMode === 'content') {//treat pin as content
         jQuery.each(pins, function(index, pin){
-          if(jQuery('#'+map.getCountryId(index)).length == 0){
-              return;
+          if(jQuery('#' + map.getCountryId(index)).length === 0){
+            return;
           }
           //mapData.pathes[code].name
           var pinIndex = map.getPinId(index);
-          if(jQuery('#'+pinIndex).length > 0){
-            jQuery('#'+pinIndex).remove();
+          var $pin = jQuery('#' + pinIndex);
+          if($pin.length > 0){
+            $pin.remove();
           }
-          map.container.append('<div id="' + pinIndex + '" for="'+index+'" class="jqvmap_pin" style="position:absolute">' + pin + '</div>');
+          map.container.append('<div id="' + pinIndex + '" for="' + index + '" class="jqvmap_pin" style="position:absolute">' + pin + '</div>');
         });
       } else { //treat pin as id of an html content
         jQuery.each(pins, function(index, pin){
-          if(jQuery('#'+map.getCountryId(index)).length == 0){
-              return;
+          if(jQuery('#' + map.getCountryId(index)).length === 0){
+            return;
           }
           var pinIndex = map.getPinId(index);
-          if(jQuery('#'+pinIndex).length > 0){
-            jQuery('#'+pinIndex).remove();
+          var $pin = jQuery('#' + pinIndex);
+          if($pin.length > 0){
+            $pin.remove();
           }
-          map.container.append('<div id="' + pinIndex + '" for="'+index+'" class="jqvmap_pin" style="position:absolute"></div>');
-          jQuery('#'+pinIndex).append(jQuery('#'+pin));
+          map.container.append('<div id="' + pinIndex + '" for="' + index + '" class="jqvmap_pin" style="position:absolute"></div>');
+          $pin.append(jQuery('#' + pin));
         });
       }
 
@@ -885,8 +858,8 @@
           map.positionPins();
         };
         this.container.bind('zoomIn', positionFix)
-        .bind('zoomOut', positionFix)
-        .bind('drag', positionFix);
+          .bind('zoomOut', positionFix)
+          .bind('drag', positionFix);
       }
     },
 
@@ -904,54 +877,82 @@
         var scale = map.scale;
 
         var left = position.left + (bbox.width / 2) * scale - pinObj.width() / 2,
-        top = position.top + (bbox.height / 2) * scale - pinObj.height() / 2;
+          top = position.top + (bbox.height / 2) * scale - pinObj.height() / 2;
 
-        pinObj.css('left',left).css('top',top);
+        pinObj.css('left', left).css('top', top);
       });
-     },
+    },
 
-     getPin: function(cc){
-       var pinObj = jQuery('#'+this.getPinId(cc));
-       return pinObj.html();
-     },
+    getPin: function(cc){
+      var pinObj = jQuery('#' + this.getPinId(cc));
+      return pinObj.html();
+    },
 
-     getPins: function(){
-       var pins = this.container.find('.jqvmap_pin');
-       var ret = new Object();
-       jQuery.each(pins, function(index, pinObj){
-         pinObj = jQuery(pinObj);
-         var cc = pinObj.attr('for');
-         var pinContent = pinObj.html();
-         eval("ret." + cc + "=pinContent");
-       });
-       return JSON.stringify(ret);
-     },
+    getPins: function(){
+      var pins = this.container.find('.jqvmap_pin');
+      var ret = {};
+      jQuery.each(pins, function(index, pinObj){
+        pinObj = jQuery(pinObj);
+        var cc = pinObj.attr('for');
+        var pinContent = pinObj.html();
+        ret[cc] = pinContent;
+      });
+      return JSON.stringify(ret);
+    },
 
-     removePin: function(cc) {
-       jQuery('#'+this.getPinId(cc)).remove();
-     },
+    removePin: function(cc) {
+      jQuery('#' + this.getPinId(cc)).remove();
+    },
 
-     removePins: function(){
-       this.container.find('.jqvmap_pin').remove();
-     }
+    removePins: function(){
+      this.container.find('.jqvmap_pin').remove();
+    }
   };
 
-  WorldMap.xlink = "http://www.w3.org/1999/xlink";
+  WorldMap.xlink = 'http://www.w3.org/1999/xlink';
   WorldMap.mapIndex = 1;
   WorldMap.maps = {};
 
-  var ColorScale = function (colors, normalizeFunction, minValue, maxValue) {
-    if (colors) {
-      this.setColors(colors);
-    }
-    if (normalizeFunction) {
-      this.setNormalizeFunction(normalizeFunction);
-    }
-    if (minValue) {
-      this.setMin(minValue);
-    }
-    if (minValue) {
-      this.setMax(maxValue);
+  jQuery.fn.vectorMap = function (options) {
+
+    var defaultParams = {
+      map: 'world_en',
+      backgroundColor: '#a5bfdd',
+      color: '#f4f3f0',
+      hoverColor: '#c9dfaf',
+      selectedColor: '#c9dfaf',
+      scaleColors: ['#b6d6ff', '#005ace'],
+      normalizeFunction: 'linear',
+      enableZoom: true,
+      showTooltip: true,
+      borderColor: '#818181',
+      borderWidth: 1,
+      borderOpacity: 0.25,
+      selectedRegions: null,
+      multiSelectRegion: false
+    }, map = this.data('mapObject');
+
+    if (options === 'addMap') {
+      WorldMap.maps[arguments[1]] = arguments[2];
+    } else if (options === 'set' && apiParams[arguments[1]]) {
+      map['set' + arguments[1].charAt(0).toUpperCase() + arguments[1].substr(1)].apply(map, Array.prototype.slice.call(arguments, 2));
+    } else if (typeof options === 'string' &&
+               typeof map[options] === 'function') {
+      return map[options].apply(map, Array.prototype.slice.call(arguments, 1));
+    } else {
+      jQuery.extend(defaultParams, options);
+      defaultParams.container = this;
+      this.css({ position: 'relative', overflow: 'hidden' });
+
+      map = new WorldMap(defaultParams);
+
+      this.data('mapObject', map);
+
+      for (var e in apiEvents) {
+        if (defaultParams[e]) {
+          this.bind(apiEvents[e] + '.jqvmap', defaultParams[e]);
+        }
+      }
     }
   };
 
@@ -989,8 +990,7 @@
         this.normalize = function (value) {
           return Math.pow(value, 0.2);
         };
-      }
-      else if (f === 'linear') {
+      } else if (f === 'linear') {
         delete this.normalize;
       } else {
         this.normalize = f;
@@ -1029,7 +1029,7 @@
       }
 
       var color;
-      if (i == this.colors.length - 1) {
+      if (i === this.colors.length - 1) {
         color = this.vectorToNum(this.colors[i]).toString(16);
       } else {
         color = (this.vectorToNum(this.vectorAdd(this.colors[i], this.vectorMult(this.vectorSubtract(this.colors[i + 1], this.colors[i]), (value) / (lengthes[i]))))).toString(16);
@@ -1087,7 +1087,7 @@
     var d;
     for (var i = 0; i < ar.length; i++) {
       d = ar[i].toString(16);
-      rgb += d.length == 1 ? '0' + d : d;
+      rgb += d.length === 1 ? '0' + d : d;
     }
     return rgb;
   };
